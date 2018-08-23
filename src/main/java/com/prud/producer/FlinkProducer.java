@@ -13,13 +13,23 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.operators.DataSource;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kafka.api.KafkaSink;
 import org.apache.flink.streaming.util.serialization.DeserializationSchema;
 import org.apache.flink.streaming.util.serialization.SerializationSchema;
+import org.apache.flink.util.Collector;
 
 import com.prud.constant.ConfigConstants;
 
@@ -42,18 +52,44 @@ public class FlinkProducer
 		File dir = new File(ConfigConstants.IL_FOLDER_LOCATION);
 		watchDirectoryPath(dir.toPath());
 	}
-	
-	public static void	writeToKafka(String path) throws Exception{
-		
+
+
+	public static void	writeToKafka(String path,String filename) throws Exception{
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
-		
+
 		DataStream<String> sourceData = env.readTextFile(path).setParallelism(1);
+
+		/*Source Data Processing*/
+		String fixedFileName = fillValue(filename, ConfigConstants.FIXED_FILE_NAME_LENGTH);
+
+	/*	DataStream<String> processedStream = sourceData.map(new MapFunction<String, String>() {
+			boolean firstRecord = true;
+			@Override
+			public String map(String inputRecord) throws Exception {
+				if(firstRecord){
+					firstRecord = !firstRecord;
+					return "H "+fixedFileName+"\n"+"D "+fixedFileName+" "+inputRecord;
+				}
+				else  {
+					return "D "+fixedFileName+" "+inputRecord;
+				}
+			}
+
+		});*/
 
 		sourceData.addSink(new KafkaSink<>(ConfigConstants.BOOTSTRAP_SERVER_CONFIG, ConfigConstants.TOPIC, new SimpleStringSchema()));
 
 		env.execute();
 
+	}
+
+	private static String fillValue(String value, int size) {
+		if(value != null) {
+			int noOfFillersNeeded = size - value.length();
+			return value + String.join("",Collections.nCopies(noOfFillersNeeded, " "));
+		}
+		return null;
 	}
 
 	public static class SimpleStringSchema implements DeserializationSchema<String>, SerializationSchema<String, byte[]> {
@@ -81,10 +117,6 @@ public class FlinkProducer
 	}
 
 	public static void watchDirectoryPath(Path path) throws Exception {
-	/*	FtpClient ftp = new FtpClient("localhost", 21, "megha", "test");
-		  ftp.open();
-		  ftp.listFiles("\\");
-	*/	
 		try {
 			Boolean isFolder = (Boolean) Files.getAttribute(path,
 					"basic:isDirectory", NOFOLLOW_LINKS);
@@ -127,7 +159,7 @@ public class FlinkProducer
 								.context();
 						// Output
 						System.out.println("New path created: " + newPath);
-						writeToKafka(ConfigConstants.IL_FOLDER_LOCATION+"//"+newPath);
+						writeToKafka(ConfigConstants.IL_FOLDER_LOCATION+"//"+newPath,newPath.toString());
 
 
 					} else if (ENTRY_MODIFY == kind) {
