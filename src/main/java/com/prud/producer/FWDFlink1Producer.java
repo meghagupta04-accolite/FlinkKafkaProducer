@@ -10,11 +10,14 @@ import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.util.Collections;
 
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -29,7 +32,7 @@ import com.prud.constant.ConfigConstants;
  * Class to read file from an ftp folder and put the file records to Kafka consumer
  *
  */
-public class FlinkProducer 
+public class FWDFlink1Producer 
 {
 	public static void main( String[] args )
 	{
@@ -41,48 +44,48 @@ public class FlinkProducer
 	}
 
 	public static void	produceMessagesToKafka() throws Exception{
-		File dir = new File(ConfigConstants.IL_FOLDER_LOCATION);
+		File dir = new File(ConfigConstants.IL_INPUT_FOLDER_LOCATION);
 		watchDirectoryPath(dir.toPath());
 	}
 
 
-	public static void	writeToKafka(String path,String filename) throws Exception{
+	public static void	writeToKafka(String path,String filename,String lineCount) throws Exception{
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		env.setParallelism(1);
 
 		DataStream<String> sourceData = env.readTextFile(path).setParallelism(1);
 
 		/*Source Data Processing*/
-		/*String fixedFileName = fillValue(filename, ConfigConstants.FIXED_FILE_NAME_LENGTH);*/
+		String fixedFileName = fillValue(filename, ConfigConstants.FIXED_FILE_NAME_LENGTH);
 
-		/*DataStream<String> processedStream = sourceData.map(new MapFunction<String, String>() {
+		DataStream<String> processedStream = sourceData.map(new MapFunction<String, String>() {
 			boolean firstRecord = true;
 			@Override
 			public String map(String inputRecord) throws Exception {
 				if(firstRecord){
 					firstRecord = !firstRecord;
-					return "H "+fixedFileName+"\n"+"D "+fixedFileName+" "+inputRecord;
+					return "H"+lineCount+"|"+fixedFileName+"##"+inputRecord;
 				}
 				else  {
-					return "D "+fixedFileName+" "+inputRecord;
+					return inputRecord;
 				}
 			}
 
 		});
-*/
-		sourceData.addSink(new KafkaSink<>(ConfigConstants.BOOTSTRAP_SERVER_CONFIG, ConfigConstants.TOPIC, new SimpleStringSchema()));
+
+		processedStream.addSink(new KafkaSink<>(ConfigConstants.BOOTSTRAP_SERVER_CONFIG, ConfigConstants.FLINK1_TOPIC, new SimpleStringSchema()));
 
 		env.execute();
 
 	}
 
-	/*private String fillValue(String value, int size) {
+	private static String fillValue(String value, int size) {
 		if(value != null) {
 			int noOfFillersNeeded = size - value.length();
 			return value + String.join("",Collections.nCopies(noOfFillersNeeded, " "));
 		}
 		return null;
-	}*/
+	}
 
 	public static class SimpleStringSchema implements DeserializationSchema<String>, SerializationSchema<String, byte[]> {
 		private static final long serialVersionUID = 1L;
@@ -150,8 +153,10 @@ public class FlinkProducer
 						Path newPath = ((WatchEvent<Path>) watchEvent)
 								.context();
 						// Output
-						System.out.println("New path created: " + newPath);
-						writeToKafka(ConfigConstants.IL_FOLDER_LOCATION+"//"+newPath,newPath.toString());
+					//	File file = newPath.toFile();
+						long lineCount = Files.lines(Paths.get(ConfigConstants.IL_INPUT_FOLDER_LOCATION+"//"+newPath)).count();
+						System.out.println("New path created: " + newPath + "lineCount"+lineCount);
+						writeToKafka(ConfigConstants.IL_INPUT_FOLDER_LOCATION+"//"+newPath,newPath.toString(),Long.toString(lineCount));
 
 
 					} else if (ENTRY_MODIFY == kind) {
