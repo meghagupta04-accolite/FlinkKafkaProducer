@@ -29,7 +29,7 @@ import com.prud.constant.ConfigConstants;
  * Class to read file from an ftp folder and put the file records to Kafka consumer
  *
  */
-public class RespFlinkBankInProducer 
+public class RespFlinkILProducer 
 {
 	public static void main( String[] args )
 	{
@@ -41,7 +41,7 @@ public class RespFlinkBankInProducer
 	}
 
 	public static void	produceMessagesToKafka() throws Exception{
-		File dir = new File(ConfigConstants.BANK_OUT_FOLDER_LOCATION);
+		File dir = new File(ConfigConstants.TRANSFORMED_IL_FILE_FOLDER_LOCATION);
 		watchDirectoryPath(dir.toPath());
 	}
 
@@ -53,7 +53,7 @@ public class RespFlinkBankInProducer
 
 		DataStream<String> sourceData = env.readTextFile(path).setParallelism(1);
 
-		sourceData.addSink(new KafkaSink<>(ConfigConstants.BOOTSTRAP_SERVER_CONFIG, ConfigConstants.BANK_RESPONSE_IN_TOPIC, new SimpleStringSchema()));
+		sourceData.addSink(new KafkaSink<>(ConfigConstants.BOOTSTRAP_SERVER_CONFIG, ConfigConstants.IL_TOPIC_NAME, new SimpleStringSchema()));
 
 		env.execute();
 
@@ -126,7 +126,7 @@ public class RespFlinkBankInProducer
 								.context();
 						// Output
 						System.out.println("New path created: " + newPath);
-						writeToKafka(ConfigConstants.BANK_OUT_FOLDER_LOCATION+"//"+newPath,newPath.toString());
+						writeToKafka(ConfigConstants.TRANSFORMED_IL_FILE_FOLDER_LOCATION+"//"+newPath,newPath.toString());
 
 
 					} else if (ENTRY_MODIFY == kind) {
